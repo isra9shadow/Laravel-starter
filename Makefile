@@ -76,9 +76,14 @@ cache-all:
 
 # Limpiar todo el entorno (excepto docker y config del proyecto)
 reset:
+	@echo "🧨 Eliminando contenedores, volúmenes y redes de Docker..."
+	docker compose down -v --remove-orphans
+	@echo "🧹 Eliminando archivos del proyecto Laravel..."
 	sudo rm -rf app bootstrap config database lang public resources routes storage tests vendor node_modules \
-	artisan composer.* package.json phpunit.xml server.php .env
+	artisan composer.* package.json phpunit.xml server.php .env vite.config.js tailwind.config.js postcss.config.js package-lock.json
+	@echo "🔄 Restaurando archivos versionados..."
 	git restore .
+
 
 # Inicializar proyecto Laravel con entorno Docker
 init:
@@ -96,8 +101,8 @@ init:
 		echo "🚀 Creando nuevo proyecto Laravel..."; \
 		mkdir -p src && \
 		docker compose run --rm app composer create-project laravel/laravel src && \
-		echo "📦 Moviendo archivos desde src/ a la raíz..."; \
-		mv src/* src/.* . 2>/dev/null || true && rm -rf src; \
+		mv src/* src/.* . 2>/dev/null || true && \
+		rm -rf src; \
 	fi && \
 	echo "📦 Instalando dependencias..."; \
 	docker compose run --rm app composer install && \
@@ -107,3 +112,4 @@ init:
 	docker compose exec app php artisan key:generate && \
 	echo "🔧 Ajustando permisos..."; \
 	docker compose exec app chmod -R 775 storage bootstrap/cache
+
