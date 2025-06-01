@@ -125,11 +125,22 @@ init:
 	@echo "🔐 Generando clave APP_KEY..."
 	docker compose exec app php artisan key:generate
 
-		@echo "🛠️  Generando tabla de sesiones si SESSION_DRIVER=database"
-	if grep -q "^SESSION_DRIVER=database" .env; then \
+	@echo "⏳ Esperando a que Laravel pueda conectar con MySQL..."
+	@max_tries=10; count=0; until docker compose exec app php artisan db:show > /dev/null 2>&1; do \
+		echo "⏱️  Esperando... intento $$count de $$max_tries"; \
+		sleep 4; \
+		count=$$((count + 1)); \
+		if [ $$count -ge $$max_tries ]; then \
+			echo "❌ No se pudo conectar a MySQL tras $$max_tries intentos."; \
+			exit 1; \
+		fi; \
+	done
+
+	@echo "🛠️  Generando tabla de sesiones si SESSION_DRIVER=database"
+	@if grep -q "^SESSION_DRIVER=database" .env; then \
 		if ! find database/migrations -name '*_create_sessions_table.php' | grep -q .; then \
 			echo "📥 Creando migración de sesiones..."; \
-			docker compose exec app php artisan session:table; \
+			docker compose exec app php artisan session:table || true; \
 		else \
 			echo "ℹ️  La migración de sesiones ya existe."; \
 		fi; \
