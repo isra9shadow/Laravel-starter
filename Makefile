@@ -1,5 +1,5 @@
 .PHONY: up down bash composer artisan test rebuild npm-install npm-dev migrate migrate-fresh seed session \
-        config-clear cache-clear config-cache migrate-reset
+        config-clear cache-clear config-cache migrate-reset cache-all reset init
 
 # Iniciar los contenedores
 up:
@@ -64,19 +64,23 @@ cache-clear:
 config-cache:
 	docker compose exec app php artisan config:cache
 
-# Atajo para limpiar y volver a migrar desde cero
+# Limpiar y volver a migrar desde cero
 migrate-reset: config-clear cache-clear config-cache migrate-fresh
 
+# Limpiar todos los tipos de caché
 cache-all:
 	docker compose exec app php artisan cache:clear
 	docker compose exec app php artisan config:clear
 	docker compose exec app php artisan route:clear
 	docker compose exec app php artisan view:clear
 
+# Limpiar todo el entorno (excepto docker y config del proyecto)
 reset:
-	sudo rm -rf app bootstrap config database lang public resources routes storage tests artisan composer.* package.json phpunit.xml server.php vendor node_modules .env
+	sudo rm -rf app bootstrap config database lang public resources routes storage tests vendor node_modules \
+	artisan composer.* package.json phpunit.xml server.php .env
 	git restore .
 
+# Inicializar proyecto Laravel con entorno Docker
 init:
 	@if [ ! -f .env ]; then \
 		echo "📄 Copiando .env.example -> .env"; \
@@ -90,9 +94,10 @@ init:
 	fi && \
 	if [ ! -f artisan ]; then \
 		echo "🚀 Creando nuevo proyecto Laravel..."; \
-		mkdir src && \
+		mkdir -p src && \
 		docker compose run --rm app composer create-project laravel/laravel src && \
-		shopt -s dotglob && mv src/* . && rm -rf src; \
+		echo "📦 Moviendo archivos desde src/ a la raíz..."; \
+		mv src/* src/.* . 2>/dev/null || true && rm -rf src; \
 	fi && \
 	echo "📦 Instalando dependencias..."; \
 	docker compose run --rm app composer install && \
