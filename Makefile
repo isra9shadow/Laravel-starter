@@ -72,3 +72,33 @@ cache-all:
 	docker compose exec app php artisan config:clear
 	docker compose exec app php artisan route:clear
 	docker compose exec app php artisan view:clear
+
+reset:
+	sudo rm -rf app bootstrap config database lang public resources routes storage tests artisan composer.* package.json phpunit.xml server.php vendor node_modules .env
+	git restore .
+
+init:
+	@if [ ! -f .env ]; then \
+		echo "📄 Copiando .env.example -> .env"; \
+		cp .env.example .env; \
+	fi && \
+	if ! grep -q "UID=" .env; then \
+		echo "🧩 Añadiendo UID y GID al .env"; \
+		echo "" >> .env; \
+		echo "UID=$$(id -u)" >> .env; \
+		echo "GID=$$(id -g)" >> .env; \
+	fi && \
+	if [ ! -f artisan ]; then \
+		echo "🚀 Creando nuevo proyecto Laravel..."; \
+		mkdir src && \
+		docker compose run --rm app composer create-project laravel/laravel src && \
+		shopt -s dotglob && mv src/* . && rm -rf src; \
+	fi && \
+	echo "📦 Instalando dependencias..."; \
+	docker compose run --rm app composer install && \
+	echo "🐳 Levantando contenedores..."; \
+	docker compose up -d && \
+	echo "🔐 Generando clave de aplicación..."; \
+	docker compose exec app php artisan key:generate && \
+	echo "🔧 Ajustando permisos..."; \
+	docker compose exec app chmod -R 775 storage bootstrap/cache
