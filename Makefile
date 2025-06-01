@@ -87,29 +87,54 @@ reset:
 
 # Inicializar proyecto Laravel con entorno Docker
 init:
-	@if [ ! -f .env ]; then \
-		echo "📄 Copiando .env.example -> .env"; \
-		cp .env.example .env; \
-	fi && \
-	if ! grep -q "UID=" .env; then \
-		echo "🧩 Añadiendo UID y GID al .env"; \
-		echo "" >> .env; \
-		echo "UID=$$(id -u)" >> .env; \
-		echo "GID=$$(id -g)" >> .env; \
-	fi && \
-	if [ ! -f artisan ]; then \
-		echo "🚀 Creando nuevo proyecto Laravel..."; \
-		mkdir -p src && \
-		docker compose run --rm app composer create-project laravel/laravel src && \
-		mv src/* src/.* . 2>/dev/null || true && \
-		rm -rf src; \
-	fi && \
-	echo "📦 Instalando dependencias..."; \
-	docker compose run --rm app composer install && \
-	echo "🐳 Levantando contenedores..."; \
-	docker compose up -d && \
-	echo "🔐 Generando clave de aplicación..."; \
-	docker compose exec app php artisan key:generate && \
-	echo "🔧 Ajustando permisos..."; \
-	docker compose exec app chmod -R 775 storage bootstrap/cache
+	@echo "🔍 Verificando si rsync está instalado..."
+	if ! command -v rsync >/dev/null 2>&1; then \
+		echo "⚠️  rsync no está instalado. Instalando..."; \
+		sudo apt-get update && sudo apt-get install -y rsync || { echo "❌ Error al instalar rsync"; exit 1; }; \
+	fi
 
+	@echo "🧪 Verificando existencia de Laravel..."
+	if [ ! -f artisan ]; then \
+		echo "📦 Laravel no está instalado. Creando proyecto temporal..."; \
+		if ! command -v composer >/dev/null 2>&1; then \
+			echo "❌ Composer no está instalado. Instálalo primero."; \
+			exit 1; \
+		fi; \
+		composer create-project laravel/laravel laravel-temp; \
+		echo "📂 Moviendo archivos de laravel-temp a raíz..."; \
+		rsync -a laravel-temp/ ./ && find laravel-temp -type f -delete && find laravel-temp -type d -empty -delete && rmdir laravel-temp 2>/dev/null || true; \
+		echo "🧼 Eliminando .env autogenerado por Laravel..."; \
+		rm -f .env; \
+	fi
+
+	@echo "📄 Copiando .env.example.local -> .env"
+	cp --update=none .env.example.local .env
+	cp --update=none .gitignore.example.local .gitignore
+	
+	@echo "🧩 Insertando UID y GID en .env"
+	sed -i '/^HOST_UID=/d' .env
+	sed -i '/^HOST_GID=/d' .env
+	echo "HOST_UID=$(shell id -u)" >> .env
+	echo "HOST_GID=$(shell id -g)" >> .env
+
+	@echo "📦 Instalando dependencias PHP localmente..."
+	composer install
+
+	@echo "🐳 Levantando contenedores Docker..."
+	docker compose up -d --build
+	@echo "🔐 Generando clave APP_KEY..."
+	docker compose exec app php artisan key:generate
+
+		@echo "🛠️  Generando tabla de sesiones si SESSION_DRIVER=database"
+	if grep -q "^SESSION_DRIVER=database" .env; then \
+		if ! find database/migrations -name '*_create_sessions_table.php' | grep -q .; then \
+			echo "📥 Creando migración de sesiones..."; \
+			docker compose exec app php artisan session:table; \
+		else \
+			echo "ℹ️  La migración de sesiones ya existe."; \
+		fi; \
+		echo "📦 Ejecutando migraciones..."; \
+		docker compose exec app php artisan migrate; \
+	else \
+		echo "ℹ️  SESSION_DRIVER no es 'database', se omite la migración de sesiones."; \
+	fi
